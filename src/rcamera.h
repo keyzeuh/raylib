@@ -434,7 +434,7 @@ Matrix GetCameraProjectionMatrix(Camera *camera, float aspect)
 #if !defined(RCAMERA_STANDALONE)
 // Update camera position for selected mode
 // Camera mode: CAMERA_FREE, CAMERA_FIRST_PERSON, CAMERA_THIRD_PERSON, CAMERA_ORBITAL or CUSTOM
-void UpdateCamera(Camera *camera, int mode)
+void UpdateCamera(Camera *camera, int mode, bool ignoreMouse)
 {
     Vector2 mousePositionDelta = GetMouseDelta();
 
@@ -494,9 +494,11 @@ void UpdateCamera(Camera *camera, int mode)
         // Gamepad movement
         if (IsGamepadAvailable(0))
         {
-            // Gamepad controller support
-            CameraYaw(camera, -(GetGamepadAxisMovement(0, GAMEPAD_AXIS_RIGHT_X)*2)*CAMERA_MOUSE_MOVE_SENSITIVITY, rotateAroundTarget);
-            CameraPitch(camera, -(GetGamepadAxisMovement(0, GAMEPAD_AXIS_RIGHT_Y)*2)*CAMERA_MOUSE_MOVE_SENSITIVITY, lockView, rotateAroundTarget, rotateUp);
+            if (!ignoreMouse) {
+                // Gamepad controller support
+                CameraYaw(camera, -(GetGamepadAxisMovement(0, GAMEPAD_AXIS_RIGHT_X)*2)*CAMERA_MOUSE_MOVE_SENSITIVITY, rotateAroundTarget);
+                CameraPitch(camera, -(GetGamepadAxisMovement(0, GAMEPAD_AXIS_RIGHT_Y)*2)*CAMERA_MOUSE_MOVE_SENSITIVITY, lockView, rotateAroundTarget, rotateUp);
+            }
 
             if (GetGamepadAxisMovement(0, GAMEPAD_AXIS_LEFT_Y) <= -0.25f) CameraMoveForward(camera, cameraMoveSpeed, moveInWorldPlane);
             if (GetGamepadAxisMovement(0, GAMEPAD_AXIS_LEFT_X) <= -0.25f) CameraMoveRight(camera, -cameraMoveSpeed, moveInWorldPlane);
