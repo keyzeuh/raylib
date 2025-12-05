@@ -77,7 +77,7 @@ RAYLIB_SRC_PATH       ?= ../src
 
 # Locations of raylib.h and libraylib.a/libraylib.so
 # NOTE: Those variables are only used for PLATFORM_OS: LINUX, BSD
-DESTDIR ?= /usr/local
+DESTDIR               ?= /usr/local
 RAYLIB_INCLUDE_PATH   ?= $(DESTDIR)/include
 RAYLIB_LIB_PATH       ?= $(DESTDIR)/lib
 
@@ -703,6 +703,7 @@ SHADERS = \
     shaders/shaders_vertex_displacement
 
 AUDIO = \
+	audio/audio_fft_spectrum_visualizer \
     audio/audio_mixed_processor \
     audio/audio_module_playing \
     audio/audio_music_stream \
