@@ -29,7 +29,7 @@
 *
 *   LICENSE: zlib/libpng
 *
-*   Copyright (c) 2013-2025 Ramon Santamaria (@raysan5), Colleague Riley and contributors
+*   Copyright (c) 2013-2026 Ramon Santamaria (@raysan5), Colleague Riley and contributors
 *
 *   This software is provided "as-is", without any express or implied warranty. In no event
 *   will the authors be held liable for any damages arising from the use of this software.
@@ -47,11 +47,6 @@
 *     3. This notice may not be removed or altered from any source distribution.
 *
 **********************************************************************************************/
-
-#ifndef RAYLIB_H /* this should never actually happen, it's only here for IDEs */
-#include "raylib.h"
-#include "../rcore.c"
-#endif
 
 #if defined(PLATFORM_WEB_RGFW)
 #define RGFW_NO_GL_HEADER
@@ -295,14 +290,13 @@ bool WindowShouldClose(void)
 // Toggle fullscreen mode
 void ToggleFullscreen(void)
 {
-    if (!CORE.Window.fullscreen)
+    if (!FLAG_IS_SET(CORE.Window.flags, FLAG_FULLSCREEN_MODE))
     {
         // Store previous window position (in case we exit fullscreen)
         CORE.Window.previousPosition = CORE.Window.position;
         CORE.Window.previousScreen = CORE.Window.screen;
 
         platform.mon = RGFW_window_getMonitor(platform.window);
-        CORE.Window.fullscreen = true;
         FLAG_SET(CORE.Window.flags, FLAG_FULLSCREEN_MODE);
 
         RGFW_monitor_scaleToWindow(platform.mon, platform.window);
@@ -310,7 +304,6 @@ void ToggleFullscreen(void)
     }
     else
     {
-        CORE.Window.fullscreen = false;
         FLAG_CLEAR(CORE.Window.flags, FLAG_FULLSCREEN_MODE);
 
         if (platform.mon.mode.area.w)
@@ -336,7 +329,9 @@ void ToggleFullscreen(void)
 // Toggle borderless windowed mode
 void ToggleBorderlessWindowed(void)
 {
-    if (CORE.Window.fullscreen)
+    if (FLAG_IS_SET(CORE.Window.flags, FLAG_FULLSCREEN_MODE)) ToggleFullscreen();
+
+    if (FLAG_IS_SET(CORE.Window.flags, FLAG_BORDERLESS_WINDOWED_MODE))
     {
         CORE.Window.previousPosition = CORE.Window.position;
         CORE.Window.previousScreen = CORE.Window.screen;
@@ -353,8 +348,6 @@ void ToggleBorderlessWindowed(void)
         CORE.Window.position = CORE.Window.previousPosition;
         RGFW_window_resize(platform.window, RGFW_AREA(CORE.Window.previousScreen.width, CORE.Window.previousScreen.height));
     }
-
-    CORE.Window.fullscreen = !CORE.Window.fullscreen;
 }
 
 // Set window state: maximized, if resizable
@@ -390,7 +383,7 @@ void SetWindowState(unsigned int flags)
     }
     if (FLAG_IS_SET(flags, FLAG_FULLSCREEN_MODE))
     {
-        if (!CORE.Window.fullscreen) ToggleFullscreen();
+        ToggleFullscreen();
     }
     if (FLAG_IS_SET(flags, FLAG_WINDOW_RESIZABLE))
     {
@@ -464,7 +457,7 @@ void ClearWindowState(unsigned int flags)
     }
     if (FLAG_IS_SET(flags, FLAG_FULLSCREEN_MODE))
     {
-        if (CORE.Window.fullscreen) ToggleFullscreen();
+        ToggleFullscreen();
     }
     if (FLAG_IS_SET(flags, FLAG_WINDOW_RESIZABLE))
     {
@@ -515,7 +508,7 @@ void ClearWindowState(unsigned int flags)
     }
     if (FLAG_IS_SET(flags, FLAG_BORDERLESS_WINDOWED_MODE))
     {
-        if (CORE.Window.fullscreen) ToggleBorderlessWindowed();
+        ToggleBorderlessWindowed();
     }
     if (FLAG_IS_SET(flags, FLAG_MSAA_4X_HINT))
     {
@@ -527,46 +520,15 @@ void ClearWindowState(unsigned int flags)
     }
 }
 
-int RGFW_formatToChannels(int format)
-{
-    switch (format)
-    {
-        case PIXELFORMAT_UNCOMPRESSED_GRAYSCALE:
-        case PIXELFORMAT_UNCOMPRESSED_R16:           // 16 bpp (1 channel - half float)
-        case PIXELFORMAT_UNCOMPRESSED_R32:           // 32 bpp (1 channel - float)
-            return 1;
-        case PIXELFORMAT_UNCOMPRESSED_GRAY_ALPHA:    // 8*2 bpp (2 channels)
-        case PIXELFORMAT_UNCOMPRESSED_R5G6B5:        // 16 bpp
-        case PIXELFORMAT_UNCOMPRESSED_R8G8B8:        // 24 bpp
-        case PIXELFORMAT_UNCOMPRESSED_R5G5B5A1:      // 16 bpp (1 bit alpha)
-        case PIXELFORMAT_UNCOMPRESSED_R4G4B4A4:      // 16 bpp (4 bit alpha)
-        case PIXELFORMAT_UNCOMPRESSED_R8G8B8A8:      // 32 bpp
-            return 2;
-        case PIXELFORMAT_UNCOMPRESSED_R32G32B32:     // 32*3 bpp (3 channels - float)
-        case PIXELFORMAT_UNCOMPRESSED_R16G16B16:     // 16*3 bpp (3 channels - half float)
-        case PIXELFORMAT_COMPRESSED_DXT1_RGB:        // 4 bpp (no alpha)
-        case PIXELFORMAT_COMPRESSED_ETC1_RGB:        // 4 bpp
-        case PIXELFORMAT_COMPRESSED_ETC2_RGB:        // 4 bpp
-        case PIXELFORMAT_COMPRESSED_PVRT_RGB:        // 4 bpp
-            return 3;
-        case PIXELFORMAT_UNCOMPRESSED_R32G32B32A32:  // 32*4 bpp (4 channels - float)
-        case PIXELFORMAT_UNCOMPRESSED_R16G16B16A16:  // 16*4 bpp (4 channels - half float)
-        case PIXELFORMAT_COMPRESSED_DXT1_RGBA:       // 4 bpp (1 bit alpha)
-        case PIXELFORMAT_COMPRESSED_DXT3_RGBA:       // 8 bpp
-        case PIXELFORMAT_COMPRESSED_DXT5_RGBA:       // 8 bpp
-        case PIXELFORMAT_COMPRESSED_ETC2_EAC_RGBA:   // 8 bpp
-        case PIXELFORMAT_COMPRESSED_PVRT_RGBA:       // 4 bpp
-        case PIXELFORMAT_COMPRESSED_ASTC_4x4_RGBA:   // 8 bpp
-        case PIXELFORMAT_COMPRESSED_ASTC_8x8_RGBA:   // 2 bpp
-            return 4;
-        default: return 4;
-    }
-}
-
 // Set icon for window
 void SetWindowIcon(Image image)
 {
-    RGFW_window_setIcon(platform.window, (u8 *)image.data, RGFW_AREA(image.width, image.height), RGFW_formatToChannels(image.format));
+    if (image.format != PIXELFORMAT_UNCOMPRESSED_R8G8B8A8)
+    {
+        TRACELOG(LOG_WARNING, "RGFW: Window icon image must be in R8G8B8A8 pixel format");
+        return;
+    }
+    RGFW_window_setIcon(platform.window, (u8 *)image.data, RGFW_AREA(image.width, image.height), 4);
 }
 
 // Set icon for window
@@ -583,12 +545,17 @@ void SetWindowIcons(Image *images, int count)
 
         for (int i = 0; i < count; i++)
         {
+            if (images[i].format != PIXELFORMAT_UNCOMPRESSED_R8G8B8A8)
+            {
+                TRACELOG(LOG_WARNING, "RGFW: Window icon image must be in R8G8B8A8 pixel format");
+                continue;
+            }
             if ((bigIcon == NULL) || ((images[i].width > bigIcon->width) && (images[i].height > bigIcon->height))) bigIcon = &images[i];
             if ((smallIcon == NULL) || ((images[i].width < smallIcon->width) && (images[i].height > smallIcon->height))) smallIcon = &images[i];
         }
 
-        if (smallIcon != NULL) RGFW_window_setIconEx(platform.window, (u8 *)smallIcon->data, RGFW_AREA(smallIcon->width, smallIcon->height), RGFW_formatToChannels(smallIcon->format), RGFW_iconWindow);
-        if (bigIcon != NULL) RGFW_window_setIconEx(platform.window, (u8 *)bigIcon->data, RGFW_AREA(bigIcon->width, bigIcon->height), RGFW_formatToChannels(bigIcon->format), RGFW_iconTaskbar);
+        if (smallIcon != NULL) RGFW_window_setIconEx(platform.window, (u8 *)smallIcon->data, RGFW_AREA(smallIcon->width, smallIcon->height), 4, RGFW_iconWindow);
+        if (bigIcon != NULL) RGFW_window_setIconEx(platform.window, (u8 *)bigIcon->data, RGFW_AREA(bigIcon->width, bigIcon->height), 4, RGFW_iconTaskbar);
     }
 }
 
@@ -870,17 +837,27 @@ double GetTime(void)
 }
 
 // Open URL with default system browser (if available)
-// NOTE: This function is only safe to use if you control the URL given.
-// A user could craft a malicious string performing another action.
-// Only call this function yourself not with user input or make sure to check the string yourself.
-// Ref: https://github.com/raysan5/raylib/issues/686
+// NOTE: This function is only safe to use if you control the URL given
+// A user could craft a malicious string performing another action
 void OpenURL(const char *url)
 {
     // Security check to (partially) avoid malicious code on target platform
     if (strchr(url, '\'') != NULL) TRACELOG(LOG_WARNING, "SYSTEM: Provided URL could be potentially malicious, avoid [\'] character");
     else
     {
-        // TODO: Open URL implementation
+        char *cmd = (char *)RL_CALLOC(strlen(url) + 32, sizeof(char));
+#if defined(_WIN32)
+        sprintf(cmd, "explorer \"%s\"", url);
+#endif
+#if defined(__linux__) || defined(__FreeBSD__) || defined(__OpenBSD__)
+        sprintf(cmd, "xdg-open '%s'", url); // Alternatives: firefox, x-www-browser
+#endif
+#if defined(__APPLE__)
+        sprintf(cmd, "open '%s'", url);
+#endif
+        int result = system(cmd);
+        if (result == -1) TRACELOG(LOG_WARNING, "OpenURL() child process could not be created");
+        RL_FREE(cmd);
     }
 }
 
@@ -915,7 +892,7 @@ void SetMouseCursor(int cursor)
     RGFW_window_setMouseStandard(platform.window, cursor);
 }
 
-// Get physical key name.
+// Get physical key name
 const char *GetKeyName(int key)
 {
     TRACELOG(LOG_WARNING, "GetKeyName() unsupported on target platform");
@@ -1095,11 +1072,7 @@ void PollInputEvents(void)
                     CORE.Input.Keyboard.currentKeyState[key] = 1;
                 }
 
-                // TODO: Put exitKey verification outside the switch?
-                if (CORE.Input.Keyboard.currentKeyState[CORE.Input.Keyboard.exitKey])
-                {
-                    CORE.Window.shouldClose = true;
-                }
+                if (CORE.Input.Keyboard.currentKeyState[CORE.Input.Keyboard.exitKey]) CORE.Window.shouldClose = true;
 
                 // NOTE: event.text.text data comes an UTF-8 text sequence but we register codepoints (int)
                 // Check if there is space available in the queue
@@ -1283,13 +1256,11 @@ int InitPlatform(void)
     // Check window creation flags
     if (FLAG_IS_SET(CORE.Window.flags, FLAG_FULLSCREEN_MODE))
     {
-        CORE.Window.fullscreen = true;
         FLAG_SET(flags, RGFW_windowFullscreen);
     }
 
     if (FLAG_IS_SET(CORE.Window.flags, FLAG_BORDERLESS_WINDOWED_MODE))
     {
-        CORE.Window.fullscreen = true;
         FLAG_SET(flags, RGFW_windowedFullscreen);
     }
 
@@ -1340,10 +1311,6 @@ int InitPlatform(void)
     CORE.Window.display.width = CORE.Window.screen.width;
     CORE.Window.display.height = CORE.Window.screen.height;
 #endif
-    // TODO: Is this needed by raylib now?
-    // If so, rcore_desktop_sdl should be updated too
-    //SetupFramebuffer(CORE.Window.display.width, CORE.Window.display.height);
-
     if (FLAG_IS_SET(CORE.Window.flags, FLAG_VSYNC_HINT)) RGFW_window_swapInterval(platform.window, 1);
     RGFW_window_makeCurrent(platform.window);
 

@@ -30,7 +30,7 @@
 #     > PLATFORM_ANDROID:
 #         - Android (ARM, ARM64)
 #
-#   Copyright (c) 2013-2025 Ramon Santamaria (@raysan5)
+#   Copyright (c) 2013-2026 Ramon Santamaria (@raysan5)
 #
 #   This software is provided "as-is", without any express or implied warranty. In no event
 #   will the authors be held liable for any damages arising from the use of this software.
@@ -205,10 +205,12 @@ ifeq ($(TARGET_PLATFORM),PLATFORM_DESKTOP_GLFW)
     endif
 endif
 ifeq ($(TARGET_PLATFORM),PLATFORM_ANDROID)
-    MAKE = mingw32-make
+    ifeq ($(PLATFORM_OS),WINDOWS)
+        MAKE = mingw32-make
+    endif
 endif
 ifeq ($(TARGET_PLATFORM),$(filter $(TARGET_PLATFORM),PLATFORM_WEB PLATFORM_WEB_RGFW))
-    ifeq ($(OS),Windows_NT)
+    ifeq ($(PLATFORM_OS),WINDOWS)
         MAKE = mingw32-make
     else
         EMMAKE != type emmake
@@ -231,7 +233,7 @@ endif
 #  -Wno-missing-braces  ignore invalid warning (GCC bug 53119)
 #  -Wno-unused-value    ignore unused return values of some functions (i.e. fread())
 #  -D_DEFAULT_SOURCE    use with -std=c99 on Linux and PLATFORM_WEB, required for timespec
-CFLAGS = -Wall -std=c99 -D_DEFAULT_SOURCE -Wno-missing-braces -Wunused-result
+CFLAGS = -Wall -std=c99 -D_DEFAULT_SOURCE -Wno-missing-braces -Wno-unused-result
 
 ifeq ($(BUILD_MODE),DEBUG)
     CFLAGS += -g -D_DEBUG
@@ -531,7 +533,7 @@ CORE = \
     core/core_delta_time \
     core/core_directory_files \
     core/core_drop_files \
-    core/core_high_dpi \
+    core/core_highdpi_demo \
     core/core_highdpi_testbed \
     core/core_input_actions \
     core/core_input_gamepad \
@@ -560,6 +562,7 @@ CORE = \
     core/core_world_screen
 
 SHAPES = \
+    shapes/shapes_ball_physics \
     shapes/shapes_basic_shapes \
     shapes/shapes_bouncing_ball \
     shapes/shapes_bullet_hell \
@@ -574,6 +577,7 @@ SHAPES = \
     shapes/shapes_easings_box \
     shapes/shapes_easings_rectangles \
     shapes/shapes_following_eyes \
+    shapes/shapes_hilbert_curve \
     shapes/shapes_kaleidoscope \
     shapes/shapes_lines_bezier \
     shapes/shapes_lines_drawing \
@@ -582,11 +586,14 @@ SHAPES = \
     shapes/shapes_math_angle_rotation \
     shapes/shapes_math_sine_cosine \
     shapes/shapes_mouse_trail \
+    shapes/shapes_penrose_tile \
     shapes/shapes_pie_chart \
     shapes/shapes_rectangle_advanced \
     shapes/shapes_rectangle_scaling \
     shapes/shapes_recursive_tree \
     shapes/shapes_ring_drawing \
+    shapes/shapes_rlgl_color_wheel \
+    shapes/shapes_rlgl_triangle \
     shapes/shapes_rounded_rectangle_drawing \
     shapes/shapes_simple_particles \
     shapes/shapes_splines_drawing \
@@ -599,6 +606,7 @@ TEXTURES = \
     textures/textures_background_scrolling \
     textures/textures_blend_modes \
     textures/textures_bunnymark \
+    textures/textures_cellular_automata \
     textures/textures_fog_of_war \
     textures/textures_gif_player \
     textures/textures_image_channel \
@@ -615,9 +623,11 @@ TEXTURES = \
     textures/textures_particles_blending \
     textures/textures_polygon_drawing \
     textures/textures_raw_data \
+    textures/textures_screen_buffer \
     textures/textures_sprite_animation \
     textures/textures_sprite_button \
     textures/textures_sprite_explosion \
+    textures/textures_sprite_stacking \
     textures/textures_srcrec_dstrec \
     textures/textures_textured_curve \
     textures/textures_tiled_drawing \
@@ -635,6 +645,7 @@ TEXT = \
     text/text_input_box \
     text/text_rectangle_bounds \
     text/text_sprite_fonts \
+    text/text_strings_management \
     text/text_unicode_emojis \
     text/text_unicode_ranges \
     text/text_words_alignment \
@@ -649,6 +660,7 @@ MODELS = \
     models/models_box_collisions \
     models/models_cubicmap_rendering \
     models/models_decals \
+    models/models_directional_billboard \
     models/models_first_person_maze \
     models/models_geometric_shapes \
     models/models_heightmap_rendering \
@@ -679,6 +691,7 @@ SHADERS = \
     shaders/shaders_depth_writing \
     shaders/shaders_eratosthenes_sieve \
     shaders/shaders_fog_rendering \
+    shaders/shaders_game_of_life \
     shaders/shaders_hot_reloading \
     shaders/shaders_hybrid_rendering \
     shaders/shaders_julia_set \
@@ -703,7 +716,6 @@ SHADERS = \
     shaders/shaders_vertex_displacement
 
 AUDIO = \
-	audio/audio_fft_spectrum_visualizer \
     audio/audio_mixed_processor \
     audio/audio_module_playing \
     audio/audio_music_stream \
@@ -711,6 +723,7 @@ AUDIO = \
     audio/audio_sound_loading \
     audio/audio_sound_multi \
     audio/audio_sound_positioning \
+    audio/audio_spectrum_visualizer \
     audio/audio_stream_effects
 
 OTHERS = \

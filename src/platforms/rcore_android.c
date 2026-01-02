@@ -27,7 +27,7 @@
 *
 *   LICENSE: zlib/libpng
 *
-*   Copyright (c) 2013-2025 Ramon Santamaria (@raysan5) and contributors
+*   Copyright (c) 2013-2026 Ramon Santamaria (@raysan5) and contributors
 *
 *   This software is provided "as-is", without any express or implied warranty. In no event
 *   will the authors be held liable for any damages arising from the use of this software.
@@ -84,7 +84,6 @@ typedef struct {
 // Global Variables Definition
 //----------------------------------------------------------------------------------
 extern CoreData CORE;                   // Global CORE state context
-extern bool isGpuReady;                 // Flag to note GPU has been initialized successfully
 static PlatformData platform = { 0 };   // Platform specific data
 
 //----------------------------------------------------------------------------------
@@ -268,6 +267,8 @@ static void AndroidCommandCallback(struct android_app *app, int32_t cmd);       
 static int32_t AndroidInputCallback(struct android_app *app, AInputEvent *event);   // Process Android inputs
 static GamepadButton AndroidTranslateGamepadButton(int button);                     // Map Android gamepad button to raylib gamepad button
 
+static void SetupFramebuffer(int width, int height); // Setup main framebuffer (required by InitPlatform())
+
 //----------------------------------------------------------------------------------
 // Module Functions Declaration
 //----------------------------------------------------------------------------------
@@ -358,13 +359,17 @@ void RestoreWindow(void)
 // Set window configuration state using flags
 void SetWindowState(unsigned int flags)
 {
-    TRACELOG(LOG_WARNING, "SetWindowState() not available on target platform");
+    if (!CORE.Window.ready) TRACELOG(LOG_WARNING, "WINDOW: SetWindowState does nothing before window initialization, Use \"SetConfigFlags\" instead");
+
+    // State change: FLAG_WINDOW_ALWAYS_RUN
+    if (FLAG_IS_SET(flags, FLAG_WINDOW_ALWAYS_RUN)) FLAG_SET(CORE.Window.flags, FLAG_WINDOW_ALWAYS_RUN);
 }
 
 // Clear window configuration state flags
 void ClearWindowState(unsigned int flags)
 {
-    TRACELOG(LOG_WARNING, "ClearWindowState() not available on target platform");
+    // State change: FLAG_WINDOW_ALWAYS_RUN
+    if (FLAG_IS_SET(flags, FLAG_WINDOW_ALWAYS_RUN)) FLAG_CLEAR(CORE.Window.flags, FLAG_WINDOW_ALWAYS_RUN);
 }
 
 // Set icon for window
@@ -602,7 +607,7 @@ void DisableCursor(void)
 // Swap back buffer with front buffer (screen drawing)
 void SwapScreenBuffer(void)
 {
-    eglSwapBuffers(platform.device, platform.surface);
+    if (platform.surface != EGL_NO_SURFACE) eglSwapBuffers(platform.device, platform.surface);
 }
 
 //----------------------------------------------------------------------------------
@@ -623,10 +628,9 @@ double GetTime(void)
 }
 
 // Open URL with default system browser (if available)
-// NOTE: This function is only safe to use if you control the URL given.
-// A user could craft a malicious string performing another action.
-// Only call this function yourself not with user input or make sure to check the string yourself.
-// Ref: https://github.com/raysan5/raylib/issues/686
+// NOTE: This function is only safe to use if you control the URL given
+// A user could craft a malicious string performing another action
+// Only call this function yourself not with user input or make sure to check the string yourself
 void OpenURL(const char *url)
 {
     // Security check to (partially) avoid malicious code
@@ -687,7 +691,7 @@ void SetMouseCursor(int cursor)
     TRACELOG(LOG_WARNING, "SetMouseCursor() not implemented on target platform");
 }
 
-// Get physical key name.
+// Get physical key name
 const char *GetKeyName(int key)
 {
     TRACELOG(LOG_WARNING, "GetKeyName() not implemented on target platform");
@@ -742,15 +746,15 @@ void PollInputEvents(void)
     int pollEvents = 0;
 
     // Poll Events (registered events) until we reach TIMEOUT which indicates there are no events left to poll
-    // NOTE: Activity is paused if not enabled (platform.appEnabled)
-    while ((pollResult = ALooper_pollOnce(platform.appEnabled? 0 : -1, NULL, &pollEvents, ((void **)&platform.source)) > ALOOPER_POLL_TIMEOUT))
+    // NOTE: Activity is paused if not enabled (platform.appEnabled) and always run flag is not set (FLAG_WINDOW_ALWAYS_RUN)
+    while ((pollResult = ALooper_pollOnce((platform.appEnabled || FLAG_IS_SET(CORE.Window.flags, FLAG_WINDOW_ALWAYS_RUN))? 0 : -1, NULL, &pollEvents, ((void **)&platform.source)) > ALOOPER_POLL_TIMEOUT))
     {
         // Process this event
         if (platform.source != NULL) platform.source->process(platform.app, platform.source);
 
-        // NOTE: Allow closing the window in case a configuration change happened.
+        // NOTE: Allow closing the window in case a configuration change happened
         // The android_main function should be allowed to return to its caller in order for the
-        // Android OS to relaunch the activity.
+        // Android OS to relaunch the activity
         if (platform.app->destroyRequested != 0)
         {
             CORE.Window.shouldClose = true;
@@ -829,13 +833,13 @@ int InitPlatform(void)
     // Wait for window to be initialized (display and context)
     while (!CORE.Window.ready)
     {
-        // Process events until we reach TIMEOUT, which indicates no more events queued.
+        // Process events until we reach TIMEOUT, which indicates no more events queued
         while ((pollResult = ALooper_pollOnce(0, NULL, &pollEvents, ((void **)&platform.source)) > ALOOPER_POLL_TIMEOUT))
         {
             // Process this event
             if (platform.source != NULL) platform.source->process(platform.app, platform.source);
 
-            // NOTE: It's highly likely destroyRequested will never be non-zero at the start of the activity lifecycle.
+            // NOTE: It's highly likely destroyRequested will never be non-zero at the start of the activity lifecycle
             //if (platform.app->destroyRequested != 0) CORE.Window.shouldClose = true;
         }
     }
@@ -869,8 +873,9 @@ void ClosePlatform(void)
         platform.device = EGL_NO_DISPLAY;
     }
 
-    // NOTE: Reset global state in case the activity is being relaunched.
-    if (platform.app->destroyRequested != 0) {
+    // NOTE: Reset global state in case the activity is being relaunched
+    if (platform.app->destroyRequested != 0)
+    {
         CORE = (CoreData){0};
         platform = (PlatformData){0};
     }
@@ -882,7 +887,6 @@ void ClosePlatform(void)
 // NOTE: returns false in case graphic device could not be created
 static int InitGraphicsDevice(void)
 {
-    CORE.Window.fullscreen = true;
     FLAG_SET(CORE.Window.flags, FLAG_FULLSCREEN_MODE);
 
     EGLint samples = 0;
@@ -915,7 +919,27 @@ static int InitGraphicsDevice(void)
     EGLint numConfigs = 0;
 
     // Get an EGL device connection
-    platform.device = eglGetDisplay(EGL_DEFAULT_DISPLAY);
+    // NOTE: eglGetPlatformDisplay() is preferred over eglGetDisplay() legacy call
+    platform.device = EGL_NO_DISPLAY;
+#if defined(EGL_VERSION_1_5)
+    platform.device = eglGetPlatformDisplay(EGL_PLATFORM_GBM_KHR, platform.gbmDevice, NULL);
+#else
+    // Check if extension is available for eglGetPlatformDisplayEXT()
+    // NOTE: Better compatibility with some drivers (e.g. Mali Midgard)
+    const char *eglClientExtensions = eglQueryString(EGL_NO_DISPLAY, EGL_EXTENSIONS);
+    if (eglClientExtensions != NULL)
+    {
+        if (strstr(eglClientExtensions, "EGL_EXT_platform_base") != NULL)
+        {
+            PFNEGLGETPLATFORMDISPLAYEXTPROC eglGetPlatformDisplayEXT = (PFNEGLGETPLATFORMDISPLAYEXTPROC)eglGetProcAddress("eglGetPlatformDisplayEXT");
+            if (eglGetPlatformDisplayEXT != NULL) platform.device = eglGetPlatformDisplayEXT(EGL_PLATFORM_GBM_KHR, platform.gbmDevice, NULL);
+        }
+    }
+
+    // In case extension not found or display could not be retrieved, try useing legacy version
+    if (platform.device == EGL_NO_DISPLAY) platform.device = eglGetDisplay(EGL_DEFAULT_DISPLAY);
+#endif
+
     if (platform.device == EGL_NO_DISPLAY)
     {
         TRACELOG(LOG_WARNING, "DISPLAY: Failed to initialize EGL device");
@@ -925,7 +949,7 @@ static int InitGraphicsDevice(void)
     // Initialize the EGL device connection
     if (eglInitialize(platform.device, NULL, NULL) == EGL_FALSE)
     {
-        // If all of the calls to eglInitialize returned EGL_FALSE then an error has occurred.
+        // If all of the calls to eglInitialize returned EGL_FALSE then an error has occurred
         TRACELOG(LOG_WARNING, "DISPLAY: Failed to initialize EGL device");
         return -1;
     }
@@ -1042,7 +1066,6 @@ static void AndroidCommandCallback(struct android_app *app, int32_t cmd)
                     // Initialize OpenGL context (states and resources)
                     // NOTE: CORE.Window.currentFbo.width and CORE.Window.currentFbo.height not used, just stored as globals in rlgl
                     rlglInit(CORE.Window.currentFbo.width, CORE.Window.currentFbo.height);
-                    isGpuReady = true;
 
                     // Setup default viewport
                     // NOTE: It updated CORE.Window.render.width and CORE.Window.render.height
@@ -1081,21 +1104,6 @@ static void AndroidCommandCallback(struct android_app *app, int32_t cmd)
 
                     // Initialize random seed
                     SetRandomSeed((unsigned int)time(NULL));
-
-                    // TODO: GPU assets reload in case of lost focus (lost context)
-                    // NOTE: This problem has been solved just unbinding and rebinding context from display
-                    /*
-                    if (assetsReloadRequired)
-                    {
-                        for (int i = 0; i < assetCount; i++)
-                        {
-                            // TODO: Unload old asset if required
-
-                            // Load texture again to pointed texture
-                            (*textureAsset + i) = LoadTexture(assetPath[i]);
-                        }
-                    }
-                    */
                 }
             }
         } break;
@@ -1115,7 +1123,7 @@ static void AndroidCommandCallback(struct android_app *app, int32_t cmd)
         case APP_CMD_TERM_WINDOW:
         {
             // Detach OpenGL context and destroy display surface
-            // NOTE 1: This case is used when the user exits the app without closing it. We detach the context to ensure everything is recoverable upon resuming.
+            // NOTE 1: This case is used when the user exits the app without closing it, context is detached to ensure everything is recoverable upon resuming
             // NOTE 2: Detaching context before destroying display surface avoids losing our resources (textures, shaders, VBOs...)
             // NOTE 3: In some cases (too many context loaded), OS could unload context automatically... :(
             if (platform.device != EGL_NO_DISPLAY)
@@ -1179,8 +1187,8 @@ static GamepadButton AndroidTranslateGamepadButton(int button)
 static int32_t AndroidInputCallback(struct android_app *app, AInputEvent *event)
 {
     // If additional inputs are required check:
-    // https://developer.android.com/ndk/reference/group/input
-    // https://developer.android.com/training/game-controllers/controller-input
+    // REF: https://developer.android.com/ndk/reference/group/input
+    // REF: https://developer.android.com/training/game-controllers/controller-input
 
     int type = AInputEvent_getType(event);
     int source = AInputEvent_getSource(event);
@@ -1251,8 +1259,11 @@ static int32_t AndroidInputCallback(struct android_app *app, AInputEvent *event)
         //int32_t AKeyEvent_getMetaState(event);
 
         // Handle gamepad button presses and releases
-        if (FLAG_IS_SET(source, AINPUT_SOURCE_JOYSTICK) ||
-            FLAG_IS_SET(source, AINPUT_SOURCE_GAMEPAD))
+        // NOTE: Skip gamepad handling if this is a keyboard event, as some devices
+        // report both AINPUT_SOURCE_KEYBOARD and AINPUT_SOURCE_GAMEPAD flags
+        if ((FLAG_IS_SET(source, AINPUT_SOURCE_JOYSTICK) ||
+             FLAG_IS_SET(source, AINPUT_SOURCE_GAMEPAD)) &&
+            !FLAG_IS_SET(source, AINPUT_SOURCE_KEYBOARD))
         {
             // For now we'll assume a single gamepad which we "detect" on its input event
             CORE.Input.Gamepad.ready[0] = true;
@@ -1290,7 +1301,7 @@ static int32_t AndroidInputCallback(struct android_app *app, AInputEvent *event)
         {
             // Let the OS handle input to avoid app stuck. Behaviour: CMD_PAUSE -> CMD_SAVE_STATE -> CMD_STOP -> CMD_CONFIG_CHANGED -> CMD_LOST_FOCUS
             // Resuming Behaviour: CMD_START -> CMD_RESUME -> CMD_CONFIG_CHANGED -> CMD_CONFIG_CHANGED -> CMD_GAINED_FOCUS
-            // It seems like locking mobile, screen size (CMD_CONFIG_CHANGED) is affected.
+            // It seems like locking mobile, screen size (CMD_CONFIG_CHANGED) is affected
             // NOTE: AndroidManifest.xml must have <activity android:configChanges="orientation|keyboardHidden|screenSize" >
             // Before that change, activity was calling CMD_TERM_WINDOW and CMD_DESTROY when locking mobile, so that was not a normal behaviour
             return 0;
@@ -1345,30 +1356,17 @@ static int32_t AndroidInputCallback(struct android_app *app, AInputEvent *event)
         }
     }
 
-    if ((flags == AMOTION_EVENT_ACTION_POINTER_UP) || (flags == AMOTION_EVENT_ACTION_UP) || (flags == AMOTION_EVENT_ACTION_HOVER_EXIT))
-    {
-        // One of the touchpoints is released, remove it from touch point arrays
-        if (flags == AMOTION_EVENT_ACTION_HOVER_EXIT)
-        {
-            // If the touchPoint is hover, remove it from hoverPoints
-            for (int i = 0; i < MAX_TOUCH_POINTS; i++)
-            {
-                if (touchRaw.hoverPoints[i] == touchRaw.pointId[pointerIndex])
-                {
-                    touchRaw.hoverPoints[i] = -1;
-                    break;
-                }
-            }
-        }
-        for (int i = pointerIndex; (i < touchRaw.pointCount - 1) && (i < MAX_TOUCH_POINTS - 1); i++)
-        {
-            touchRaw.pointId[i] = touchRaw.pointId[i+1];
-            touchRaw.position[i] = touchRaw.position[i+1];
-        }
-        touchRaw.pointCount--;
-    }
+#if defined(SUPPORT_GESTURES_SYSTEM)
+    GestureEvent gestureEvent = { 0 };
 
-    int pointCount = 0;
+    gestureEvent.pointCount = 0;
+
+    // Register touch actions
+    if (flags == AMOTION_EVENT_ACTION_DOWN) gestureEvent.touchAction = TOUCH_ACTION_DOWN;
+    else if (flags == AMOTION_EVENT_ACTION_UP) gestureEvent.touchAction = TOUCH_ACTION_UP;
+    else if (flags == AMOTION_EVENT_ACTION_MOVE) gestureEvent.touchAction = TOUCH_ACTION_MOVE;
+    else if (flags == AMOTION_EVENT_ACTION_CANCEL) gestureEvent.touchAction = TOUCH_ACTION_CANCEL;
+
     for (int i = 0; (i < touchRaw.pointCount) && (i < MAX_TOUCH_POINTS); i++)
     {
         // If the touchPoint is hover, Ignore it
@@ -1384,34 +1382,61 @@ static int32_t AndroidInputCallback(struct android_app *app, AInputEvent *event)
         }
         if (hover) continue;
 
-        CORE.Input.Touch.pointId[pointCount] = touchRaw.pointId[i];
-        CORE.Input.Touch.position[pointCount] = touchRaw.position[i];
-        pointCount++;
-    }
-    CORE.Input.Touch.pointCount = pointCount;
-
-#if defined(SUPPORT_GESTURES_SYSTEM)
-    GestureEvent gestureEvent = { 0 };
-
-    gestureEvent.pointCount = CORE.Input.Touch.pointCount;
-
-    // Register touch actions
-    if (flags == AMOTION_EVENT_ACTION_DOWN) gestureEvent.touchAction = TOUCH_ACTION_DOWN;
-    else if (flags == AMOTION_EVENT_ACTION_UP) gestureEvent.touchAction = TOUCH_ACTION_UP;
-    else if (flags == AMOTION_EVENT_ACTION_MOVE) gestureEvent.touchAction = TOUCH_ACTION_MOVE;
-    else if (flags == AMOTION_EVENT_ACTION_CANCEL) gestureEvent.touchAction = TOUCH_ACTION_CANCEL;
-
-    for (int i = 0; (i < gestureEvent.pointCount) && (i < MAX_TOUCH_POINTS); i++)
-    {
-        gestureEvent.pointId[i] = CORE.Input.Touch.pointId[i];
-        gestureEvent.position[i] = CORE.Input.Touch.position[i];
-        gestureEvent.position[i].x /= (float)GetScreenWidth();
-        gestureEvent.position[i].y /= (float)GetScreenHeight();
+        gestureEvent.pointId[gestureEvent.pointCount] = touchRaw.pointId[i];
+        gestureEvent.position[gestureEvent.pointCount] = touchRaw.position[i];
+        gestureEvent.position[gestureEvent.pointCount].x /= (float)GetScreenWidth();
+        gestureEvent.position[gestureEvent.pointCount].y /= (float)GetScreenHeight();
+        gestureEvent.pointCount++;
     }
 
     // Gesture data is sent to gestures system for processing
     ProcessGestureEvent(gestureEvent);
 #endif
+
+    if (flags == AMOTION_EVENT_ACTION_HOVER_EXIT)
+    {
+        // Hover exited. So, remove it from hoverPoints
+        for (int i = 0; i < MAX_TOUCH_POINTS; i++)
+        {
+            if (touchRaw.hoverPoints[i] == touchRaw.pointId[pointerIndex])
+            {
+                touchRaw.hoverPoints[i] = -1;
+                break;
+            }
+        }
+    }
+
+    if ((flags == AMOTION_EVENT_ACTION_POINTER_UP) || (flags == AMOTION_EVENT_ACTION_UP))
+    {
+        // One of the touchpoints is released, remove it from touch point arrays
+        for (int i = pointerIndex; (i < touchRaw.pointCount - 1) && (i < MAX_TOUCH_POINTS - 1); i++)
+        {
+            touchRaw.pointId[i] = touchRaw.pointId[i+1];
+            touchRaw.position[i] = touchRaw.position[i+1];
+        }
+        touchRaw.pointCount--;
+    }
+
+    CORE.Input.Touch.pointCount = 0;
+    for (int i = 0; (i < touchRaw.pointCount) && (i < MAX_TOUCH_POINTS); i++)
+    {
+        // If the touchPoint is hover, Ignore it
+        bool hover = false;
+        for (int j = 0; j < MAX_TOUCH_POINTS; j++)
+        {
+            // Check if the touchPoint is in hoverPointers
+            if (touchRaw.hoverPoints[j] == touchRaw.pointId[i])
+            {
+                hover = true;
+                break;
+            }
+        }
+        if (hover) continue;
+
+        CORE.Input.Touch.pointId[CORE.Input.Touch.pointCount] = touchRaw.pointId[i];
+        CORE.Input.Touch.position[CORE.Input.Touch.pointCount] = touchRaw.position[i];
+        CORE.Input.Touch.pointCount++;
+    }
 
     // When all touchpoints are tapped and released really quickly, this event is generated
     if (flags == AMOTION_EVENT_ACTION_CANCEL) CORE.Input.Touch.pointCount = 0;
@@ -1419,21 +1444,93 @@ static int32_t AndroidInputCallback(struct android_app *app, AInputEvent *event)
     if (CORE.Input.Touch.pointCount > 0) CORE.Input.Touch.currentTouchState[MOUSE_BUTTON_LEFT] = 1;
     else CORE.Input.Touch.currentTouchState[MOUSE_BUTTON_LEFT] = 0;
 
-    // Stores the previous position of touch[0] only while it's active to calculate the delta.
-    if (flags == AMOTION_EVENT_ACTION_MOVE)
-    {
-        CORE.Input.Mouse.previousPosition = CORE.Input.Mouse.currentPosition;
-    }
-    else
-    {
-        CORE.Input.Mouse.previousPosition = CORE.Input.Touch.position[0];
-    }
+    // Stores the previous position of touch[0] only while it's active to calculate the delta
+    if (flags == AMOTION_EVENT_ACTION_MOVE) CORE.Input.Mouse.previousPosition = CORE.Input.Mouse.currentPosition;
+    else CORE.Input.Mouse.previousPosition = CORE.Input.Touch.position[0];
 
     // Map touch[0] as mouse input for convenience
     CORE.Input.Mouse.currentPosition = CORE.Input.Touch.position[0];
     CORE.Input.Mouse.currentWheelMove = (Vector2){ 0.0f, 0.0f };
 
     return 0;
+}
+
+// Compute framebuffer size relative to screen size and display size
+// NOTE: Global variables CORE.Window.render.width/CORE.Window.render.height and CORE.Window.renderOffset.x/CORE.Window.renderOffset.y can be modified
+static void SetupFramebuffer(int width, int height)
+{
+    // Calculate CORE.Window.render.width and CORE.Window.render.height, we have the display size (input params) and the desired screen size (global var)
+    if ((CORE.Window.screen.width > CORE.Window.display.width) || (CORE.Window.screen.height > CORE.Window.display.height))
+    {
+        TRACELOG(LOG_WARNING, "DISPLAY: Downscaling required: Screen size (%ix%i) is bigger than display size (%ix%i)", CORE.Window.screen.width, CORE.Window.screen.height, CORE.Window.display.width, CORE.Window.display.height);
+
+        // Downscaling to fit display with border-bars
+        float widthRatio = (float)CORE.Window.display.width/(float)CORE.Window.screen.width;
+        float heightRatio = (float)CORE.Window.display.height/(float)CORE.Window.screen.height;
+
+        if (widthRatio <= heightRatio)
+        {
+            CORE.Window.render.width = CORE.Window.display.width;
+            CORE.Window.render.height = (int)round((float)CORE.Window.screen.height*widthRatio);
+            CORE.Window.renderOffset.x = 0;
+            CORE.Window.renderOffset.y = (CORE.Window.display.height - CORE.Window.render.height);
+        }
+        else
+        {
+            CORE.Window.render.width = (int)round((float)CORE.Window.screen.width*heightRatio);
+            CORE.Window.render.height = CORE.Window.display.height;
+            CORE.Window.renderOffset.x = (CORE.Window.display.width - CORE.Window.render.width);
+            CORE.Window.renderOffset.y = 0;
+        }
+
+        // Screen scaling required
+        float scaleRatio = (float)CORE.Window.render.width/(float)CORE.Window.screen.width;
+        CORE.Window.screenScale = MatrixScale(scaleRatio, scaleRatio, 1.0f);
+
+        // NOTE: We render to full display resolution!
+        // We just need to calculate above parameters for downscale matrix and offsets
+        CORE.Window.render.width = CORE.Window.display.width;
+        CORE.Window.render.height = CORE.Window.display.height;
+
+        TRACELOG(LOG_WARNING, "DISPLAY: Downscale matrix generated, content will be rendered at (%ix%i)", CORE.Window.render.width, CORE.Window.render.height);
+    }
+    else if ((CORE.Window.screen.width < CORE.Window.display.width) || (CORE.Window.screen.height < CORE.Window.display.height))
+    {
+        // Required screen size is smaller than display size
+        TRACELOG(LOG_INFO, "DISPLAY: Upscaling required: Screen size (%ix%i) smaller than display size (%ix%i)", CORE.Window.screen.width, CORE.Window.screen.height, CORE.Window.display.width, CORE.Window.display.height);
+
+        if ((CORE.Window.screen.width == 0) || (CORE.Window.screen.height == 0))
+        {
+            CORE.Window.screen.width = CORE.Window.display.width;
+            CORE.Window.screen.height = CORE.Window.display.height;
+        }
+
+        // Upscaling to fit display with border-bars
+        float displayRatio = (float)CORE.Window.display.width/(float)CORE.Window.display.height;
+        float screenRatio = (float)CORE.Window.screen.width/(float)CORE.Window.screen.height;
+
+        if (displayRatio <= screenRatio)
+        {
+            CORE.Window.render.width = CORE.Window.screen.width;
+            CORE.Window.render.height = (int)round((float)CORE.Window.screen.width/displayRatio);
+            CORE.Window.renderOffset.x = 0;
+            CORE.Window.renderOffset.y = (CORE.Window.render.height - CORE.Window.screen.height);
+        }
+        else
+        {
+            CORE.Window.render.width = (int)round((float)CORE.Window.screen.height*displayRatio);
+            CORE.Window.render.height = CORE.Window.screen.height;
+            CORE.Window.renderOffset.x = (CORE.Window.render.width - CORE.Window.screen.width);
+            CORE.Window.renderOffset.y = 0;
+        }
+    }
+    else
+    {
+        CORE.Window.render.width = CORE.Window.screen.width;
+        CORE.Window.render.height = CORE.Window.screen.height;
+        CORE.Window.renderOffset.x = 0;
+        CORE.Window.renderOffset.y = 0;
+    }
 }
 
 // EOF

@@ -33,7 +33,7 @@
 #   Many thanks to Milan Nikolic (@gen2brain) for implementing Android platform pipeline.
 #   Many thanks to Emanuele Petriglia for his contribution on GNU/Linux pipeline.
 #
-#   Copyright (c) 2013-2025 Ramon Santamaria (@raysan5)
+#   Copyright (c) 2013-2026 Ramon Santamaria (@raysan5)
 #
 #   This software is provided "as-is", without any express or implied warranty. In no event
 #   will the authors be held liable for any damages arising from the use of this software.
@@ -406,7 +406,7 @@ ifeq ($(TARGET_PLATFORM),PLATFORM_ANDROID)
         CFLAGS += -march=armv7-a -mfloat-abi=softfp -mfpu=vfpv3-d16
     endif
     ifeq ($(ANDROID_ARCH),arm64)
-        CFLAGS += -target aarch64 -mfix-cortex-a53-835769
+        CFLAGS += -mfix-cortex-a53-835769
     endif
     ifeq ($(ANDROID_ARCH),x86)
         CFLAGS += -march=i686
