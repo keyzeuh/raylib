@@ -4,7 +4,7 @@
 *
 *   Example complexity rating: [★★★☆] 3/4
 *
-*   Example originally created with raylib 5.6-dev, last time updated with raylib 5.6-dev
+*   Example originally created with raylib 6.0, last time updated with raylib 6.0
 *
 *   Example contributed by David Buzatto (@davidbuzatto) and reviewed by Ramon Santamaria (@raysan5)
 *
@@ -33,7 +33,7 @@ typedef struct TextParticle {
     Vector2 ppos;      // Previous position
     float padding;
     float borderWidth;
-    float friction;   
+    float friction;
     float elasticity;
     Color color;
     bool grabbed;
@@ -65,7 +65,7 @@ int main(void)
     TextParticle textParticles[MAX_TEXT_PARTICLES] = { 0 };
     int particleCount = 0;
     TextParticle *grabbedTextParticle = NULL;
-    Vector2 pressOffset = {0};
+    Vector2 pressOffset = { 0 };
 
     PrepareFirstTextParticle("raylib => fun videogames programming!", textParticles, &particleCount);
 
@@ -118,7 +118,7 @@ int main(void)
                     if (IsKeyDown(KEY_LEFT_SHIFT))
                     {
                         ShatterTextParticle(tp, i, textParticles, &particleCount);
-                    } 
+                    }
                     else
                     {
                         SliceTextParticle(tp, i, TextLength(tp->text)/2, textParticles, &particleCount);
@@ -133,7 +133,7 @@ int main(void)
         {
             for (int i = 0; i < particleCount; i++)
             {
-                if (!textParticles[i].grabbed) textParticles[i].vel = (Vector2){ GetRandomValue(-2000, 2000), GetRandomValue(-2000, 2000) };
+                if (!textParticles[i].grabbed) textParticles[i].vel = (Vector2){ (float)GetRandomValue(-2000, 2000), (float)GetRandomValue(-2000, 2000) };
             }
         }
 
@@ -158,33 +158,33 @@ int main(void)
             TextParticle *tp = &textParticles[i];
 
             // The text particle is not grabbed
-            if (!tp->grabbed) 
+            if (!tp->grabbed)
             {
                 // text particle repositioning using the velocity
                 tp->rect.x += tp->vel.x * delta;
                 tp->rect.y += tp->vel.y * delta;
 
                 // Does the text particle hit the screen right boundary?
-                if ((tp->rect.x + tp->rect.width) >= screenWidth) 
+                if ((tp->rect.x + tp->rect.width) >= screenWidth)
                 {
                     tp->rect.x = screenWidth - tp->rect.width; // Text particle repositioning
                     tp->vel.x = -tp->vel.x*tp->elasticity;  // Elasticity makes the text particle lose 10% of its velocity on hit
-                } 
+                }
                 // Does the text particle hit the screen left boundary?
                 else if (tp->rect.x <= 0)
-                { 
+                {
                     tp->rect.x = 0.0f;
                     tp->vel.x = -tp->vel.x*tp->elasticity;
                 }
 
                 // The same for y axis
-                if ((tp->rect.y + tp->rect.height) >= screenHeight) 
+                if ((tp->rect.y + tp->rect.height) >= screenHeight)
                 {
                     tp->rect.y = screenHeight - tp->rect.height;
                     tp->vel.y = -tp->vel.y*tp->elasticity;
-                } 
-                else if (tp->rect.y <= 0) 
-                { 
+                }
+                else if (tp->rect.y <= 0)
+                {
                     tp->rect.y = 0.0f;
                     tp->vel.y = -tp->vel.y*tp->elasticity;
                 }
@@ -233,9 +233,9 @@ int main(void)
             for (int i = 0; i < particleCount; i++)
             {
                 TextParticle *tp = &textParticles[i];
-                DrawRectangle(tp->rect.x-tp->borderWidth, tp->rect.y-tp->borderWidth, tp->rect.width+tp->borderWidth*2, tp->rect.height+tp->borderWidth*2, BLACK);
+                DrawRectangleRec((Rectangle) { tp->rect.x - tp->borderWidth, tp->rect.y - tp->borderWidth, tp->rect.width + tp->borderWidth * 2, tp->rect.height + tp->borderWidth * 2 }, BLACK);
                 DrawRectangleRec(tp->rect, tp->color);
-                DrawText(tp->text, tp->rect.x+tp->padding, tp->rect.y+tp->padding, FONT_SIZE, BLACK);
+                DrawText(tp->text, (int)(tp->rect.x+tp->padding), (int)(tp->rect.y+tp->padding), FONT_SIZE, BLACK);
             }
 
             DrawText("grab a text particle by pressing with the mouse and throw it by releasing", 10, 10, 10, DARKGRAY);
@@ -264,9 +264,9 @@ int main(void)
 void PrepareFirstTextParticle(const char* text, TextParticle *tps, int *particleCount)
 {
     tps[0] = CreateTextParticle(
-        text, 
-        GetScreenWidth()/2, 
-        GetScreenHeight()/2, 
+        text,
+        GetScreenWidth()/2.0f,
+        GetScreenHeight()/2.0f,
         RAYWHITE
     );
     *particleCount = 1;
@@ -277,12 +277,12 @@ TextParticle CreateTextParticle(const char *text, float x, float y, Color color)
     TextParticle tp = {
         .text = "",
         .rect = { x, y, 30, 30 },
-        .vel = { GetRandomValue(-200, 200), GetRandomValue(-200, 200) },
+        .vel = { (float)GetRandomValue(-200, 200), (float)GetRandomValue(-200, 200) },
         .ppos = { 0 },
         .padding = 5.0f,
         .borderWidth = 5.0f,
-        .friction = 0.99,
-        .elasticity = 0.9,
+        .friction = 0.99f,
+        .elasticity = 0.9f,
         .color = color,
         .grabbed = false
     };
@@ -317,7 +317,7 @@ void SliceTextParticleByChar(TextParticle *tp, char charToSlice, TextParticle *t
 {
     int tokenCount = 0;
     char **tokens = TextSplit(tp->text, charToSlice, &tokenCount);
-    
+
     if (tokenCount > 1)
     {
         int textLength = TextLength(tp->text);
